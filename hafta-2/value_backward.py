@@ -1,12 +1,6 @@
 import math
 from graphviz import Digraph
 
-class Neuron:
-    def forward(self, input: Value, weight: Value, bias: Value):
-        z = input * weight + bias
-        out = z.tanh()
-        return out
-
 class Value:
     def __init__(self, data, _children=(), _op='', label=''):
         self.data = data
