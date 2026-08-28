@@ -56,14 +56,17 @@ if __name__ == "__main__":
         [1.0, -1.0, -1.0],
         [-1.0, -1.0, 1.0],
     ]
-    
+
     for k in range(100):
 
         ypred = [n(x) for x in xs]
         loss = 0
+        # loss calculate (like PyTorch MSELoss(reduction="mean"))
+        total_output = 0
         for a, b in zip(ypred, ys):
             loss += sum(mse_loss(c, d) for c, d in zip(a, b))
-        loss /= len(ys)
+            total_output += len(a)
+        loss /= total_output
 
         for p in n.parameters():
             p.grad = 0.0
