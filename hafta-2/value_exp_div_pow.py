@@ -165,7 +165,7 @@ if __name__ == "__main__":
     L1 = o.data
 
     dot = draw_dot(o)
-    dot.render('./values-graph.gv', view=True)
+    dot.render('./hafta-2/values-graph.gv', view=True)
     print(dot.source)
 
     x1 = Value(2.0, label='x1')
@@ -186,7 +186,7 @@ if __name__ == "__main__":
 
     L2 = o.data
 
-    print("numerical deriative of x1w1", (L2 - L1) / h)
+    print("numerical deriative x1w1", (L2 - L1) / h)
 
     x1 = torch.tensor([2.0], requires_grad=True)
     x2 = torch.tensor([0.0], requires_grad=True)
@@ -198,12 +198,17 @@ if __name__ == "__main__":
 
     x1w1 = x1 * w1; x1w1.retain_grad()
     x2w2 = x2 * w2; x2w2.retain_grad()
-    x1w1x2w2 = x1w1 + x2w2;
-    n = x1w1x2w2 + b;
-    e = (2*n).exp();
-    o = (e - 1) / (e + 1);
+    x1w1x2w2 = x1w1 + x2w2; x1w1x2w2.retain_grad()
+    n = x1w1x2w2 + b; n.retain_grad()
+    e = (2*n).exp(); e.retain_grad()
+    o = (e - 1) / (e + 1); o.retain_grad()
     o.backward()
 
-    print(f"torch grad x1w1: {x1w1.grad}")
+    print(f"toch grad x1w1: {x1w1.grad}")
+    print(f"torch grad x2w2: {x2w2.grad}")
+    print(f"torch grad x1w1x2w2: {x1w1x2w2.grad}")
+    print(f"torch grad n: {n.grad}")
+    print(f"torch grad e: {e.grad}")
+    print(f"torch grad o: {o.grad}")
 
 

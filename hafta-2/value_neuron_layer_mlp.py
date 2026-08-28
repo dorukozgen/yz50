@@ -56,6 +56,7 @@ if __name__ == "__main__":
         [1.0, -1.0, -1.0],
         [-1.0, -1.0, 1.0],
     ]
+    
     for k in range(100):
 
         ypred = [n(x) for x in xs]

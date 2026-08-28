@@ -54,7 +54,7 @@ if __name__ == "__main__":
 
     L2 = L.data
 
-    print((L2 - L1) / h)
+    print("numerical derivative c", (L2 - L1) / h)
 
     L.grad = 1
 
@@ -105,7 +105,7 @@ if __name__ == "__main__":
     x1.grad = w1.data * x1w1.grad
     w1.grad = x1.data * x1w1.grad
 
-    print(n.grad)
+    print("n grad", n.grad)
 
 
 
