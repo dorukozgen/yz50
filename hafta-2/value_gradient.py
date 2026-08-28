@@ -1,11 +1,5 @@
 import math
 
-class Neuron:
-    def forward(self, input: Value, weight: Value, bias: Value):
-        z = input * weight + bias
-        out = z.tanh()
-        return out
-
 class Value:
     def __init__(self, data, _children=(), _op='', label=''):
         self.data = data
@@ -46,7 +40,7 @@ if __name__ == "__main__":
     
     a = Value(2.0)
     b = Value(4.0)
-    c = Value(-5.0 + h)
+    c = Value(-5.0+h)
     d = a + b
     e = d * c
     f = Value(6.0)
@@ -94,18 +88,18 @@ if __name__ == "__main__":
     o.grad = 1
 
     # do / dn = 1 - (tanh(n) ** 2)
-    n.grad = 1 - (o.data ** 2)
+    n.grad = 1 - (o.data ** 2) * o.grad
 
     x1w1x2w2.grad = n.grad
     b.grad = n.grad
-    x2w2.grad = n.grad
-    x1w1.grad = n.grad
+    x2w2.grad = x1w1x2w2.grad
+    x1w1.grad = x1w1x2w2.grad
     x2.grad = w2.data * x2w2.grad
     w2.grad = x2.data * x2w2.grad
     x1.grad = w1.data * x1w1.grad
     w1.grad = x1.data * x1w1.grad
 
-    print("n grad", n.grad)
+    print("w1 grad", w1.grad)
 
 
 

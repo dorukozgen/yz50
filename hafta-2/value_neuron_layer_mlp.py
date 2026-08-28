@@ -1,5 +1,6 @@
 import random
 from value_exp_div_pow import Value
+import matplotlib.pyplot as plt
 
 class Neuron:
 
@@ -57,7 +58,10 @@ if __name__ == "__main__":
         [-1.0, -1.0, 1.0],
     ]
 
-    for k in range(100):
+    loss_history = []
+    iteration = 100
+
+    for k in range(iteration):
 
         ypred = [n(x) for x in xs]
         loss = 0
@@ -73,7 +77,7 @@ if __name__ == "__main__":
         loss.backward()
 
         for key, p in enumerate(n.parameters()):
-            p.data += -0.1 * p.grad
+            p.data += -0.5 * p.grad
             # if key == 5:
             #     print(f"param {key}: data: {p.data}, grad: {p.grad}")
 
@@ -82,4 +86,10 @@ if __name__ == "__main__":
         # print("w grad", n.layers[0].neurons[0].w[0].grad)
 
         # n.layers[0].neurons[0].w[0].data = n.layers[0].neurons[0].w[0].data - (0.1 * n.layers[0].neurons[0].w[0].grad)
+        loss_history.append(loss.data)
         print(k, loss.data)
+
+    plt.plot([i for i in range(iteration)], loss_history)
+    plt.xlabel("iter")
+    plt.ylabel("loss")
+    plt.show()

@@ -2,12 +2,6 @@ import math
 from graphviz import Digraph
 import torch
 
-class Neuron:
-    def forward(self, input: Value, weight: Value, bias: Value):
-        z = input * weight + bias
-        out = z.tanh()
-        return out
-
 class Value:
     def __init__(self, data, _children=(), _op='', label=''):
         self.data = data
@@ -172,21 +166,21 @@ if __name__ == "__main__":
     x2 = Value(0.0, label='x2')
 
     w1 = Value(-3.0, label='w1')
-    w2 = Value(1.0, label='w2')
+    w2 = Value(1.0 + h, label='w2')
 
     b = Value(7.0, label='b')
 
     x1w1 = x1*w1; x1w1.label = 'x1*w1'
     x2w2 = x2*w2; x2w2.label = 'x2*w2'
-    x1w1x2w2 = (x1w1 + h) + x2w2; x1w1x2w2.label = 'x1*w1 + x2*w2'
+    x1w1x2w2 = x1w1 + (x2w2); x1w1x2w2.label = 'x1*w1 + x2*w2'
     n = x1w1x2w2 + b; n.label = 'n'
 
     e = (2*n).exp(); e.label = "e"
-    o = (e - 1) / (e + 1)
+    o = ((e+h) - 1) / ((e+h) + 1)
 
     L2 = o.data
 
-    print("numerical deriative x1w1", (L2 - L1) / h)
+    print("numerical deriative e", (L2 - L1) / h)
 
     x1 = torch.tensor([2.0], requires_grad=True)
     x2 = torch.tensor([0.0], requires_grad=True)
@@ -204,6 +198,7 @@ if __name__ == "__main__":
     o = (e - 1) / (e + 1); o.retain_grad()
     o.backward()
 
+    print(f"toch grad w2: {w2.grad}")
     print(f"toch grad x1w1: {x1w1.grad}")
     print(f"torch grad x2w2: {x2w2.grad}")
     print(f"torch grad x1w1x2w2: {x1w1x2w2.grad}")

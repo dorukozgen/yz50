@@ -56,7 +56,7 @@ class Value:
                     build_topo(child)
                 topo.append(v)
 
-        self.grad = 1
+        self.grad = 1.0
         build_topo(self)
 
         for node in reversed(topo):
@@ -101,7 +101,7 @@ if __name__ == "__main__":
     d = a + b; d.label = "d"
     e = d * c; e.label = "e"
 
-    e.grad = 1
+    # e.grad = 1.0
     e.backward()
 
     dot = draw_dot(e)
