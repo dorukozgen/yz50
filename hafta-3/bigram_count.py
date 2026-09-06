@@ -69,7 +69,7 @@ if __name__ == "__main__":
                 break
         print(''.join(out))
 
-    # Task 3
+    # # Task 3
 
     log_likelihood = 0
     n = 0
@@ -112,11 +112,11 @@ if __name__ == "__main__":
 
     neg_log_liklihood = torch.zeros(5)
     for i in range(5):
-        x1, x2 = xs[i].tolist()
+        x = xs[i].tolist()
         y = ys[i].item()
 
-        print(f'trigram example {i+1}: {itos[x1]}{itos[x2]}{itos[y]} (indexes {x1},{x2},{y})')
-        print(f'input to the neural net:', x1, x2)
+        print(f'trigram example {i+1}: {itos[x]}{itos[y]} (indexes {x},{y})')
+        print(f'input to the neural net:', x)
         print(f'output probablities from the neural net', probs[i])
         print(f'lable (actual next character)', y)
         p = probs[i, y]

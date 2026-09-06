@@ -65,7 +65,7 @@ if __name__ == "__main__":
 
     cbar = plt.colorbar(sc, ax=ax, shrink=0.5, aspect=5)
     cbar.set_label("Frequency")
-    # plt.show()
+    plt.show()
 
     # Task 2
 
@@ -82,7 +82,7 @@ if __name__ == "__main__":
             out.append(itos[ix])
             ix1 = ix2
             ix2 = ix
-            if ix2 == 0:
+            if ix == 0:
                 break
         print(''.join(out))
 
@@ -90,7 +90,7 @@ if __name__ == "__main__":
 
     log_likelihood = 0
     n = 0
-    for w in (words + ["andrej"]):
+    for w in words:
         chs = ['.', '.'] + list(w) + ['.']
         for ch1, ch2, ch3 in zip(chs, chs[1:], chs[2:]):
             ix1 = stoi[ch1]
@@ -169,7 +169,7 @@ if __name__ == "__main__":
         loss.backward()
 
         with torch.no_grad():
-            W += -30 * W.grad 
+            W.data += -30 * W.grad 
 
         print("loss:", loss.item())
 
