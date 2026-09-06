@@ -50,7 +50,7 @@ if __name__ == "__main__":
             plt.text(i, j, chstr, ha="center", va="bottom", color="gray")
             plt.text(i, j, N[i, j].item(), ha="center", va="top", color="gray")
     plt.axis("off")
-    plt.show()
+    # plt.show()
 
     # Task 2
 
@@ -73,7 +73,7 @@ if __name__ == "__main__":
 
     log_likelihood = 0
     n = 0
-    for w in ['doruk']:
+    for w in words:
         chs = ['.'] + list(w) + ['.']
         for ch1, ch2 in zip(chs, chs[1:]):
             ix1 = stoi[ch1]
@@ -104,12 +104,35 @@ if __name__ == "__main__":
 
     g = torch.Generator().manual_seed(2147483647)
 
+    xenc = F.one_hot(xs, num_classes=27).float()
     W = torch.randn((27, 27), generator=g, requires_grad=True)
+    logits = xenc @ W
+    counts = logits.exp()
+    probs = counts / counts.sum(1, keepdim=True)
+
+    neg_log_liklihood = torch.zeros(5)
+    for i in range(5):
+        x1, x2 = xs[i].tolist()
+        y = ys[i].item()
+
+        print(f'trigram example {i+1}: {itos[x1]}{itos[x2]}{itos[y]} (indexes {x1},{x2},{y})')
+        print(f'input to the neural net:', x1, x2)
+        print(f'output probablities from the neural net', probs[i])
+        print(f'lable (actual next character)', y)
+        p = probs[i, y]
+        print(f'probablity assigned by the neural net to the correct charater', p.item())
+        logp = torch.log(p)
+        print(f'log liklihood', logp.item())
+        neg_log_liklihood[i] = -logp
+        print(f'negative log liklihood:', neg_log_liklihood[i].item())
+
+    print('=========')
+    print('average negative log liklihood:', neg_log_liklihood.mean().item())
 
     for k in range(100):
 
-        zenc = F.one_hot(xs, num_classes=27).float()
-        logits = zenc @ W
+        xenc = F.one_hot(xs, num_classes=27).float()
+        logits = xenc @ W
 
         #softmax
         counts = logits.exp()
@@ -126,7 +149,7 @@ if __name__ == "__main__":
 
     g = torch.Generator().manual_seed(2147483647)
 
-    for i in range(30):
+    for i in range(100):
         out = []
         ix = 0
         while True:

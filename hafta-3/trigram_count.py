@@ -6,7 +6,7 @@ if __name__ == "__main__":
 
     # Task 1
 
-    words = open('./hafta-3/names.txt', 'r').read().splitlines()
+    words = open('./hafta-3/names_dev.txt', 'r').read().splitlines()
 
     t = {}
 
@@ -90,7 +90,7 @@ if __name__ == "__main__":
 
     log_likelihood = 0
     n = 0
-    for w in ['andrejq']:
+    for w in (words + ["andrej"]):
         chs = ['.', '.'] + list(w) + ['.']
         for ch1, ch2, ch3 in zip(chs, chs[1:], chs[2:]):
             ix1 = stoi[ch1]
@@ -116,7 +116,7 @@ if __name__ == "__main__":
             ix2 = stoi[ch2]
             ix3 = stoi[ch3]
             xs.append([ix1, ix2])
-            ys.append(ix2)
+            ys.append(ix3)
     xs = torch.tensor(xs)
     ys = torch.tensor(ys)
     num = xs.nelement()
@@ -124,17 +124,33 @@ if __name__ == "__main__":
 
     g = torch.Generator().manual_seed(2147483647)
 
-    # xenc = F.one_hot(xs, num_classes=27).float()
-    # print(xenc.shape)
-    # num_sequences = xs.size(0)
-    # xenc_flat = xenc.view(num_sequences, -1)
-
-
-    # print(num_sequences)
-    # print(xenc_flat.shape)
-    # print(xenc_flat)
-
+    xenc = F.one_hot(xs, num_classes=27).float()
+    num_sequences = xs.size(0)
+    xenc_flat = xenc.view(num_sequences, -1)
     W = torch.randn((54, 27), generator=g, requires_grad=True)
+    logits = xenc_flat @ W
+    counts = logits.exp()
+    probs = counts / counts.sum(1, keepdim=True)
+
+    neg_log_liklihood = torch.zeros(5)
+    for i in range(5):
+        x1, x2 = xs[i].tolist()
+        y = ys[i].item()
+
+        print(f'trigram example {i+1}: {itos[x1]}{itos[x2]}{itos[y]} (indexes {x1},{x2},{y})')
+        print(f'input to the neural net:', x1, x2)
+        print(f'output probablities from the neural net', probs[i])
+        print(f'lable (actual next character)', y)
+        p = probs[i, y] # Probablity of the correct next charater
+        print(f'probablity assigned by the neural net to the correct charater', p.item())
+        logp = torch.log(p) # log probablity
+        print(f'log liklihood', logp.item())
+        neg_log_liklihood[i] = -logp
+        print(f'negative log liklihood:', neg_log_liklihood[i].item())
+        #neg_log_liklihood[i] = neg_log_liklihood
+
+    print('=========')
+    print('average negative log liklihood:', neg_log_liklihood.mean().item())
 
     for k in range(100):
 
@@ -152,24 +168,29 @@ if __name__ == "__main__":
         W.grad = None
         loss.backward()
 
-        W.data += -30 * W.grad
+        with torch.no_grad():
+            W += -30 * W.grad 
 
         print("loss:", loss.item())
 
-    # g = torch.Generator().manual_seed(2147483647)
+    g = torch.Generator().manual_seed(2147483647)
 
-    for i in range(30):
+    for i in range(100):
         out = []
         ix1, ix2 = 0, 0
         while True:
-            xenc = F.one_hot(torch.tensor([ix]), num_classes=27).float()
+            xenc1 = F.one_hot(torch.tensor([ix1]), num_classes=27).float()
+            xenc2 = F.one_hot(torch.tensor([ix2]), num_classes=27).float()
+            xenc = torch.cat((xenc1, xenc2), dim=1).view(1, -1)
             # print(xenc)
             logits = xenc @ W
             counts = logits.exp()
             probs = counts / counts.sum(1, keepdim=True)
             # print(probs)
-            ix = torch.multinomial(probs, num_samples=1, replacement=True, generator=g).item()
-            out.append(itos[ix])
-            if ix == 0:
+            ix1 = ix2
+            ix2 = torch.multinomial(probs, num_samples=1, replacement=True, generator=g).item()
+            # print(ix2)
+            out.append(itos[ix2])
+            if ix2 == 0:
                 break
         print(''.join(out))
