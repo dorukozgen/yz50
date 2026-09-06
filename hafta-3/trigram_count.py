@@ -33,7 +33,7 @@ if __name__ == "__main__":
     #         N[i, j] = b.get(bigram, 0)
 
     for w in words:
-        chs = ['.'] + ['.'] + list(w) + ['.']
+        chs = ['.', '.'] + list(w) + ['.']
         for ch1, ch2, ch3 in zip(chs, chs[1:], chs[2:]):
             ix1 = stoi[ch1]
             ix2 = stoi[ch2]
@@ -43,102 +43,133 @@ if __name__ == "__main__":
     print(N)
 
     fig = plt.figure(figsize=(16,16))
-    ax = fig.add_subplot(projection="3d")
-    for i in range(27):
-        for j in range(27):
-            for k in range(27):
-                chstr = itos[i] + itos[j] + itos[k]
-                ax.text(i, j, k, chstr, ha="center", va="bottom", color="gray")
-                ax.text(i, j, k, N[i, j, k].item(), ha="center", va="top", color="gray")
-    ax.axis("off")
-    plt.show()
+    ax = fig.add_subplot(111, projection="3d")
+    x_idx, y_idx, z_idx = torch.where(N > 1)
+    freqs = N[x_idx, y_idx, z_idx] 
 
-    # # Task 2
+    sizes = (freqs / freqs.max()) * 100 
 
-    # P = (N+1).float()
-    # P /= P.sum(1, keepdim=True)
+    sc = ax.scatter(x_idx, y_idx, z_idx, c=freqs, s=sizes, cmap="viridis", alpha=0.7)
 
-    # g = torch.Generator().manual_seed(2147483647)
-    # for i in range(5):
-    #     ix = 0
-    #     out = []
-    #     while True:
-    #         p = P[ix]
-    #         ix = torch.multinomial(p, num_samples=1, replacement=True, generator=g).item()
-    #         out.append(itos[ix])
-    #         if ix == 0:
-    #             break
-    #     print(''.join(out))
+    ax.set_xticks(range(len(chars)))
+    ax.set_xticklabels(chars, rotation=90)
+    ax.set_yticks(range(len(chars)))
+    ax.set_yticklabels(chars, rotation=0)
+    ax.set_zticks(range(len(chars)))
+    ax.set_zticklabels(chars, rotation=0)
+
+    ax.set_xlabel("First Character")
+    ax.set_ylabel("Second Character")
+    ax.set_zlabel("Third Character")
+    ax.set_title("3D Visualization of Trigram Frequencies")
+
+    cbar = plt.colorbar(sc, ax=ax, shrink=0.5, aspect=5)
+    cbar.set_label("Frequency")
+    # plt.show()
+
+    # Task 2
+
+    P = (N+1).float()
+
+    g = torch.Generator().manual_seed(2147483647)
+    for i in range(10):
+        ix1, ix2 = 0, 0
+        out = []
+        while True:
+            p = P[ix1, ix2].float()
+            p /= p.sum()
+            ix = torch.multinomial(p, num_samples=1, replacement=True, generator=g).item()
+            out.append(itos[ix])
+            ix1 = ix2
+            ix2 = ix
+            if ix2 == 0:
+                break
+        print(''.join(out))
 
     # # Task 3
 
-    # log_likelihood = 0
-    # n = 0
-    # for w in ['doruk']:
-    #     chs = ['.'] + list(w) + ['.']
-    #     for ch1, ch2 in zip(chs, chs[1:]):
-    #         ix1 = stoi[ch1]
-    #         ix2 = stoi[ch2]
-    #         prob = P[ix1, ix2]
-    #         logprob = torch.log(prob)
-    #         log_likelihood += logprob
-    #         n += 1
-    # print(f"{log_likelihood=}")
-    # nll = -log_likelihood
-    # print(f"{nll=}")
-    # print(nll/n)
+    log_likelihood = 0
+    n = 0
+    for w in ['andrejq']:
+        chs = ['.', '.'] + list(w) + ['.']
+        for ch1, ch2, ch3 in zip(chs, chs[1:], chs[2:]):
+            ix1 = stoi[ch1]
+            ix2 = stoi[ch2]
+            ix3 = stoi[ch3]
+            p = P[ix1, ix2].float()
+            p /= p.sum()
+            logprob = torch.log(p[ix3])
+            log_likelihood += logprob
+            n += 1
+    print(f"{log_likelihood=}")
+    nll = -log_likelihood
+    print(f"{nll=}")
+    print(nll/n)
 
     # # Task 4
 
-    # xs, ys = [], []
-    # for w in words:
-    #     chs = ['.'] + list(w) + ['.']
-    #     for ch1, ch2 in zip(chs, chs[1:]):
-    #         ix1 = stoi[ch1]
-    #         ix2 = stoi[ch2]
-    #         xs.append(ix1)
-    #         ys.append(ix2)
-    # xs = torch.tensor(xs)
-    # ys = torch.tensor(ys)
-    # num = xs.nelement()
-    # print("el number of xs:", num)
+    xs, ys = [], []
+    for w in words:
+        chs = ['.', '.'] + list(w) + ['.']
+        for ch1, ch2, ch3 in zip(chs, chs[1:], chs[2:]):
+            ix1 = stoi[ch1]
+            ix2 = stoi[ch2]
+            ix3 = stoi[ch3]
+            xs.append([ix1, ix2])
+            ys.append(ix2)
+    xs = torch.tensor(xs)
+    ys = torch.tensor(ys)
+    num = xs.nelement()
+    print("el number of xs:", num)
+
+    g = torch.Generator().manual_seed(2147483647)
+
+    # xenc = F.one_hot(xs, num_classes=27).float()
+    # print(xenc.shape)
+    # num_sequences = xs.size(0)
+    # xenc_flat = xenc.view(num_sequences, -1)
+
+
+    # print(num_sequences)
+    # print(xenc_flat.shape)
+    # print(xenc_flat)
+
+    W = torch.randn((54, 27), generator=g, requires_grad=True)
+
+    for k in range(100):
+
+        xenc = F.one_hot(xs, num_classes=27).float()
+        num_sequences = xs.size(0)
+        xenc_flat = xenc.view(num_sequences, -1)
+        logits = xenc_flat @ W
+
+        #softmax
+        counts = logits.exp()
+        probs = counts / counts.sum(1, keepdim=True)
+
+        loss = -probs[torch.arange(num_sequences), ys].log().mean() + 0.01*(W**2).mean()
+
+        W.grad = None
+        loss.backward()
+
+        W.data += -30 * W.grad
+
+        print("loss:", loss.item())
 
     # g = torch.Generator().manual_seed(2147483647)
 
-    # W = torch.randn((27, 27), generator=g, requires_grad=True)
-
-    # for k in range(100):
-
-    #     zenc = F.one_hot(xs, num_classes=27).float()
-    #     logits = zenc @ W
-
-    #     #softmax
-    #     counts = logits.exp()
-    #     probs = counts / counts.sum(1, keepdim=True)
-
-    #     loss = -probs[torch.arange(num), ys].log().mean() + 0.01*(W**2).mean()
-
-    #     W.grad = None
-    #     loss.backward()
-
-    #     W.data += -50 * W.grad
-
-    #     print("loss:", loss.item())
-
-    # g = torch.Generator().manual_seed(2147483647)
-
-    # for i in range(30):
-    #     out = []
-    #     ix = 0
-    #     while True:
-    #         xenc = F.one_hot(torch.tensor([ix]), num_classes=27).float()
-    #         # print(xenc)
-    #         logits = xenc @ W
-    #         counts = logits.exp()
-    #         probs = counts / counts.sum(1, keepdim=True)
-    #         # print(probs)
-    #         ix = torch.multinomial(probs, num_samples=1, replacement=True, generator=g).item()
-    #         out.append(itos[ix])
-    #         if ix == 0:
-    #             break
-    #     print(''.join(out))
+    for i in range(30):
+        out = []
+        ix1, ix2 = 0, 0
+        while True:
+            xenc = F.one_hot(torch.tensor([ix]), num_classes=27).float()
+            # print(xenc)
+            logits = xenc @ W
+            counts = logits.exp()
+            probs = counts / counts.sum(1, keepdim=True)
+            # print(probs)
+            ix = torch.multinomial(probs, num_samples=1, replacement=True, generator=g).item()
+            out.append(itos[ix])
+            if ix == 0:
+                break
+        print(''.join(out))
