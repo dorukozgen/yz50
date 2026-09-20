@@ -16,7 +16,7 @@ if __name__ == "__main__":
     err = loss(output, actual)
     loss_results.append(err)
     weights.append(weight)
-    weight = 0.22
+    weight = 0.33
     output = neuron.forward([input], [weight], bias)
     err = loss(output, actual)
     loss_results.append(err)

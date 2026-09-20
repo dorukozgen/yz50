@@ -23,9 +23,10 @@ if __name__ == "__main__":
     stoi['.'] = 0
     itos = {i:s for s,i in stoi.items()}
 
+
     print(itos)
 
-    N = torch.zeros((33, 33), dtype=torch.int32)
+    N = torch.zeros((30, 30), dtype=torch.int32)
 
     # for i in range(33):
     #     for j in range(33):
@@ -44,8 +45,8 @@ if __name__ == "__main__":
     plt.figure(figsize=(16, 16))
     plt.gcf().set_size_inches(16, 16)
     plt.imshow(N, cmap='Blues')
-    for i in range(33):
-        for j in range(33):
+    for i in range(30):
+        for j in range(30):
             chstr = itos[i] + itos[j]
             plt.text(i, j, chstr, ha="center", va="bottom", color="gray")
             plt.text(i, j, N[i, j].item(), ha="center", va="top", color="gray")
@@ -104,8 +105,8 @@ if __name__ == "__main__":
 
     g = torch.Generator().manual_seed(2147483647)
 
-    xenc = F.one_hot(xs, num_classes=33).float()
-    W = torch.randn((33, 33), generator=g, requires_grad=True)
+    xenc = F.one_hot(xs, num_classes=30).float()
+    W = torch.randn((30, 30), generator=g, requires_grad=True)
     logits = xenc @ W
     counts = logits.exp()
     probs = counts / counts.sum(1, keepdim=True)
@@ -131,7 +132,7 @@ if __name__ == "__main__":
 
     for k in range(100):
 
-        zenc = F.one_hot(xs, num_classes=33).float()
+        zenc = F.one_hot(xs, num_classes=30).float()
         logits = zenc @ W
 
         #softmax
@@ -153,7 +154,7 @@ if __name__ == "__main__":
         out = []
         ix = 0
         while True:
-            xenc = F.one_hot(torch.tensor([ix]), num_classes=33).float()
+            xenc = F.one_hot(torch.tensor([ix]), num_classes=30).float()
             # print(xenc)
             logits = xenc @ W
             counts = logits.exp()

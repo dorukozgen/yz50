@@ -4,12 +4,13 @@ from loss_function import loss
 if __name__ == "__main__":
     learning_rate = 0.05
     h = 0.0001
-    input = 0.55
-    weight = -0.66
-    bias = 1
+    input = 0.05
+    weight = -0.56
+    bias = 2
     actual = 1
     neuron = Neuron()
-    for i in range(50):
+    for i in range(100):
+        print("w", weight)
         d1 = neuron.forward([input], [weight], bias)
         d2 = neuron.forward([input], [weight+h], bias)
         l1 = loss(d1, actual)
@@ -19,7 +20,6 @@ if __name__ == "__main__":
         print("d1", d1)
         print("d2", d2)
         print("loss1", l1)
-        print("loss2,", l2)
+        print("loss2", l2)
         print("slope", ((l2 - l1) / h))
     print("w_min", weight)
-    

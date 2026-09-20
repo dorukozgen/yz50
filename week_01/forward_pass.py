@@ -14,7 +14,7 @@ class Neuron:
 if __name__ == "__main__":
     inputs = [0.28, 0.56]
     weights = [0.12, -0.34]
-    bias = 3
+    bias = 1
     neuron = Neuron()
     output = neuron.forward(inputs, weights, bias)
     print(output)
