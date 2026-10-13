@@ -7,13 +7,13 @@ dir_path = os.path.dirname(os.path.realpath(__file__))
 
 from model import BigramLanguageModel
 
-batch_size = 32
+batch_size = 64
 max_iters = 10000
 eval_interval = 500
-learning_rate = 1e-3
+learning_rate = 3e-4
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 eval_iters = 200
-block_size = 8
+block_size = 256
 
 torch.manual_seed(1337)
 
@@ -41,7 +41,7 @@ def get_batch(split):
 #         # print(f"input: {context.tolist()} target: {target}")
 
 if __name__ == "__main__":
-    with open(dir_path + './data/input.txt', 'r', encoding='utf-8') as file:
+    with open(dir_path + '/data/input.txt', 'r', encoding='utf-8') as file:
         text = file.read()
         print(len(text))
 

@@ -4,8 +4,10 @@ from torch.nn import functional as F
 
 torch.manual_seed(1337)
 
-n_embd = 32
-n_head = 4
+n_embd = 384
+n_layer = 6
+n_head = 6
+dropout = 0.2
 
 class Head(nn.Module):
 
@@ -57,7 +59,8 @@ class FeedForward(nn.Module):
         self.net = nn.Sequential(
             nn.Linear(n_embd, 4 * n_embd),
             nn.ReLU(),
-            nn.Linear(4 * n_embd, n_embd)
+            nn.Linear(4 * n_embd, n_embd),
+            nn.Dropout(dropout)
         )
 
     def forward(self, x):
@@ -91,12 +94,9 @@ class BigramLanguageModel(nn.Module):
         # self.sa_heads = MultiHeadAttention(n_head, n_embd//n_head, block_size)
         # self.ffwd = FeedForward(n_embd)
 
-        self.blocks = nn.Sequential(
-            Block(n_embd, block_size),
-            Block(n_embd, block_size),
-            Block(n_embd, block_size),
-            nn.LayerNorm(n_embd)
-        )
+        self.blocks = nn.Sequential(*[Block(n_embd, block_size) for _ in range(n_layer)])
+
+        self.ln_f = nn.LayerNorm(n_embd)
 
         self.lm_head = nn.Linear(n_embd, vocab_size)
 
@@ -110,6 +110,7 @@ class BigramLanguageModel(nn.Module):
         pos_emb = self.position_embedding_table(torch.arange(T, device=self.device))
         x = tok_emb + pos_emb
         x = self.blocks(x)
+        x = self.ln_f(x)
         logits  = self.lm_head(x) # (B,T,vocab_size)
 
         if targets is None:
