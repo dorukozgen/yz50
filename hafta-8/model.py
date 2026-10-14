@@ -23,7 +23,7 @@ class Head(nn.Module):
         B,T,C = x.shape
         k = self.key(x)
         q = self.query(x)
-        wei = q @ k.transpose(-2, -1) * C**-0.5
+        wei = q @ k.transpose(-2, -1) * k.shape[-1]**-0.5
         wei = wei.masked_fill(self.tril[:T, :T] == 0, float('-inf'))
         wei = F.softmax(wei, dim=-1)
 
@@ -40,10 +40,11 @@ class MultiHeadAttention(nn.Module):
 
         self.heads = nn.ModuleList([Head(head_size, block_size) for _ in range(num_heads)])
         self.proj = nn.Linear(num_heads * head_size, n_embd)
+        self.dropout = nn.Dropout(dropout)
 
     def forward(self, x):
         out = torch.cat([head(x) for head in self.heads], dim=-1)
-        out = self.proj(x)
+        out = self.dropout(self.proj(x))
 
         return out
 
@@ -79,8 +80,8 @@ class Block(nn.Module):
         self.ln2 = nn.LayerNorm(n_embd)
 
     def forward(self, x):
-        x = x + self.sa(x)
-        x = x + self.ffwd(x)
+        x = x + self.sa(self.ln1(x))
+        x = x + self.ffwd(self.ln2(x))
 
         return x
 

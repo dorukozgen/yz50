@@ -8,7 +8,7 @@ dir_path = os.path.dirname(os.path.realpath(__file__))
 from model import BigramLanguageModel
 
 batch_size = 64
-max_iters = 10000
+max_iters = 5000
 eval_interval = 500
 learning_rate = 3e-4
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -24,6 +24,7 @@ def get_batch(split):
     x = torch.stack([data[i:i+block_size] for i in ix])
     y = torch.stack([data[i+1:i+block_size+1] for i in ix])
 
+    x, y = x.to(device), y.to(device)
     return (x, y)
 
 # xb, yb = get_batch('train')
@@ -83,9 +84,6 @@ if __name__ == "__main__":
         loss.backward()
         optimizer.step()
         
-        if iter == 5000:
-            learning_rate *= 0.1
-
         if iter % 200 == 0:
             print(loss.item())
 
@@ -104,3 +102,6 @@ if __name__ == "__main__":
         return out
 
     print('final loss', estimate_loss())
+
+    context = torch.zeros((1, 1), dtype=torch.long, device=device)
+    print(decode(m.generate(context, max_new_tokens=500)[0].tolist()))
