@@ -6,6 +6,8 @@ from torch.nn import functional as F
 import math
 
 
+# Tek katmanda birçok attention head'i bulunur.
+# matematiksel hesaplamalar aynıdır ama GPU için işleri kolaylaştırır.
 class CasualSelfAttention(nn.Module):
 
     def __init__(self, config):
