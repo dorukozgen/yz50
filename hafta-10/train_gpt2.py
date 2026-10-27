@@ -175,17 +175,21 @@ class GPT(nn.Module):
 
         return model
 
-model = GPT.from_pretrained('gpt2')
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+# from transformers import GPT2LMHeadModel
+# model = GPT.from_pretrained('gpt2')
+model = GPT(GPTConfig())
 model.eval()
-# model.to('cuda')
+model.to(device)
 
 sd_hf = model.state_dict()
 
 for k,v in sd_hf.items():
     print(k, v.shape)
 
-# idx = torch.randint(255, (1, 1024), dtype=torch.long, device='cuda')
-idx = torch.tensor([[0, 1, 2, 3, 4]], dtype=torch.long)
+idx = torch.randint(255, (1, 1024), dtype=torch.long, device=device)
+idx = torch.tensor([[0, 1, 2, 3, 4]], dtype=torch.long, device=device)
 logits, loss = model(idx)
 print(logits)
 
@@ -194,8 +198,11 @@ max_length = 50
 
 import tiktoken
 enc = tiktoken.get_encoding('gpt2')
-tokens = enc.encode("Selam, ben bir dil modeliyim.")
-tokens = torch.tensor(tokens, dtype=torch.long)
+tokens = enc.encode("Hello, I'm a newly developed language model.")
+tokens = torch.tensor(tokens, dtype=torch.long, device=device)
+
+print("len of tokens:", len(tokens))
+
 x = tokens.unsqueeze(0).repeat(num_return_sequences, 1)
 
 torch.manual_seed(42)
@@ -205,9 +212,17 @@ while x.size(1) < max_length:
         logits, loss = model(x)
         logits = logits[:, -1, :]
         probs = F.softmax(logits, dim=-1)
+
+        # burada en yüksel 50 olasılıkla beraber olasılıkların tensordaki indeksleri döndürülür.
         topk_probs, topk_indices = torch.topk(probs, 50, dim=-1)
+
+        # burada en yüksek olasılıklardan birisi seçilir.
         ix = torch.multinomial(topk_probs, 1)
+
+        # burada seçilen olasılığın orijinal indeksi yer alır. (vocab_size baz alınarak)
         xcol = torch.gather(topk_indices, -1, ix)
+
+        # sonucu ekleme işlemi
         x = torch.cat((x, xcol), dim=1)
 
 print(x)
@@ -216,3 +231,37 @@ for i in range(num_return_sequences):
     tokens = x[i, :max_length].tolist()
     decoded = enc.decode(tokens)
     print(">", decoded)
+
+import tiktoken
+import os
+
+enc = tiktoken.get_encoding('gpt2')
+
+dir_path = os.path.dirname(os.path.realpath(__file__))
+with open(dir_path + '\\input.txt', 'r') as f:
+    text = f.read()
+
+text = text[:1000]
+tokens = enc.encode(text)
+
+B, T = 4, 32
+buf = torch.tensor(tokens[:B * T + 1])
+buf = buf.to('cuda')
+x = buf[:-1].view(B, T)
+y = buf[1:].view(B, T)
+
+# optimize!
+
+# ilk loss her zaman ln(50257) ≈ 10.8 değerine yakın olmalı.
+
+optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4)
+
+for i in range(200):
+    optimizer.zero_grad()
+    logits, loss = model(x, y)
+    loss.backward()
+    optimizer.step()
+    print(f"step {i}, loss: {loss.item()}")
+
+import sys
+sys.exit()
