@@ -177,7 +177,7 @@ class GPT(nn.Module):
 
 model = GPT.from_pretrained('gpt2')
 model.eval()
-model.to('cuda')
+# model.to('cuda')
 
 sd_hf = model.state_dict()
 
@@ -185,6 +185,34 @@ for k,v in sd_hf.items():
     print(k, v.shape)
 
 # idx = torch.randint(255, (1, 1024), dtype=torch.long, device='cuda')
-idx = torch.tensor([[0, 1, 2, 3, 4]], dtype=torch.long, device='cuda')
-logits, loss = model.forward(idx)
+idx = torch.tensor([[0, 1, 2, 3, 4]], dtype=torch.long)
+logits, loss = model(idx)
 print(logits)
+
+num_return_sequences = 5
+max_length = 50
+
+import tiktoken
+enc = tiktoken.get_encoding('gpt2')
+tokens = enc.encode("Selam, ben bir dil modeliyim.")
+tokens = torch.tensor(tokens, dtype=torch.long)
+x = tokens.unsqueeze(0).repeat(num_return_sequences, 1)
+
+torch.manual_seed(42)
+
+while x.size(1) < max_length:
+    with torch.no_grad():
+        logits, loss = model(x)
+        logits = logits[:, -1, :]
+        probs = F.softmax(logits, dim=-1)
+        topk_probs, topk_indices = torch.topk(probs, 50, dim=-1)
+        ix = torch.multinomial(topk_probs, 1)
+        xcol = torch.gather(topk_indices, -1, ix)
+        x = torch.cat((x, xcol), dim=1)
+
+print(x)
+
+for i in range(num_return_sequences):
+    tokens = x[i, :max_length].tolist()
+    decoded = enc.decode(tokens)
+    print(">", decoded)
