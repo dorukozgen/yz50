@@ -6,24 +6,6 @@ from torch.nn import functional as F
 import math
 import os
 
-import tiktoken
-
-class DataLoaderLite:
-    def __init__(self, B, T):
-        self.B = B
-        self.T = T
-
-        dir_path = os.path.dirname(os.path.realpath(__file__))
-        with open(dir_path + '\\input.txt', 'r') as f:
-            text = f.read()
-
-        enc = tiktoken.get_encoding('gpt2')
-        tokens = enc.encode(text)
-        self.tokens = torch.tensor(tokens)
-        
-        print(f"loaded {len(self.tokens)} tokens")
-
-
 
 # Tek katmanda birçok attention head'i bulunur.
 # matematiksel hesaplamalar aynıdır ama GPU için işleri kolaylaştırır.
@@ -228,23 +210,23 @@ x = tokens.unsqueeze(0).repeat(num_return_sequences, 1)
 
 torch.manual_seed(42)
 
-while x.size(1) < max_length:
-    with torch.no_grad():
-        logits, loss = model(x)
-        logits = logits[:, -1, :]
-        probs = F.softmax(logits, dim=-1)
+# while x.size(1) < max_length:
+#     with torch.no_grad():
+#         logits, loss = model(x)
+#         logits = logits[:, -1, :]
+#         probs = F.softmax(logits, dim=-1)
 
-        # burada en yüksel 50 olasılıkla beraber olasılıkların tensordaki indeksleri döndürülür.
-        topk_probs, topk_indices = torch.topk(probs, 50, dim=-1)
+#         # burada en yüksel 50 olasılıkla beraber olasılıkların tensordaki indeksleri döndürülür.
+#         topk_probs, topk_indices = torch.topk(probs, 50, dim=-1)
 
-        # burada en yüksek olasılıklardan birisi seçilir.
-        ix = torch.multinomial(topk_probs, 1)
+#         # burada en yüksek olasılıklardan birisi seçilir.
+#         ix = torch.multinomial(topk_probs, 1)
 
-        # burada seçilen olasılığın orijinal indeksi yer alır. (vocab_size baz alınarak)
-        xcol = torch.gather(topk_indices, -1, ix)
+#         # burada seçilen olasılığın orijinal indeksi yer alır. (vocab_size baz alınarak)
+#         xcol = torch.gather(topk_indices, -1, ix)
 
-        # sonucu ekleme işlemi
-        x = torch.cat((x, xcol), dim=1)
+#         # sonucu ekleme işlemi
+#         x = torch.cat((x, xcol), dim=1)
 
 print(x)
 
@@ -253,31 +235,44 @@ for i in range(num_return_sequences):
     decoded = enc.decode(tokens)
     print(">", decoded)
 
-import tiktoken
-import os
+class DataLoaderLite:
+    def __init__(self, B, T):
+        self.B = B
+        self.T = T
 
-enc = tiktoken.get_encoding('gpt2')
+        dir_path = os.path.dirname(os.path.realpath(__file__))
+        with open(dir_path + '/input.txt', 'r') as f:
+            text = f.read()
 
-dir_path = os.path.dirname(os.path.realpath(__file__))
-with open(dir_path + '\\input.txt', 'r') as f:
-    text = f.read()
+        enc = tiktoken.get_encoding('gpt2')
+        tokens = enc.encode(text)
+        self.tokens = torch.tensor(tokens)
 
-text = text[:1000]
-tokens = enc.encode(text)
+        self.current_position = 0
+        
+        print(f"loaded {len(self.tokens)} tokens")
+        print(f"1 epoch = {len(self.tokens) // (B*T)} batches")
 
-B, T = 4, 32
-buf = torch.tensor(tokens[:B * T + 1])
-buf = buf.to('cuda')
-x = buf[:-1].view(B, T)
-y = buf[1:].view(B, T)
+    def next_batch(self):
+        B, T = self.B, self.T
+        buf = self.tokens[self.current_position : self.current_position + (B*T) + 1]
+        x = buf[:-1].view(B, T) # inputs
+        y = buf[1:].view(B, T) # targets
 
-# optimize!
+        self.current_position += B*T
 
-# ilk loss her zaman ln(50257) ≈ 10.8 değerine yakın olmalı.
+        if self.current_position + (B * T + 1) > len(self.tokens):
+            self.current_position = 0
+
+        return (x, y)
+
+train_loader = DataLoaderLite(B=4, T=32)
 
 optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4)
 
 for i in range(200):
+    x, y = train_loader.next_batch()
+    x.to(device), y.to(device)
     optimizer.zero_grad()
     logits, loss = model(x, y)
     loss.backward()
