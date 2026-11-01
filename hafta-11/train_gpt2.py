@@ -5,7 +5,14 @@ from torch.nn import functional as F
 
 import math
 import os
+import time
 
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+torch.set_float32_matmul_precision('high')
+
+print("cuBLAS TF32:", torch.backends.cuda.matmul.allow_tf32)
+print("cuDNN TF32:", torch.backends.cudnn.allow_tf32)
 
 # Tek katmanda birçok attention head'i bulunur.
 # matematiksel hesaplamalar aynıdır ama GPU için işleri kolaylaştırır.
@@ -19,6 +26,7 @@ class CasualSelfAttention(nn.Module):
 
         # output projection
         self.c_proj = nn.Linear(config.n_embd, config.n_embd)
+        self.c_proj.NANOGPT_SCALE_INIT = 1
 
         # regularization
         self.n_head = config.n_head
@@ -41,10 +49,11 @@ class CasualSelfAttention(nn.Module):
         q = q.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
         v = v.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
 
-        att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
-        att = att.masked_fill(self.bias[:,:,:T,:T] == 0, float('-inf'))
-        att = F.softmax(att, dim=-1)
-        y = att @ v
+        # att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
+        # att = att.masked_fill(self.bias[:,:,:T,:T] == 0, float('-inf'))
+        # att = F.softmax(att, dim=-1)
+        # y = att @ v
+        y = F.scaled_dot_product_attention(q, k, v, is_causal=True)
         y = y.transpose(1, 2).contiguous().view(B, T, C)
 
         # output projection
@@ -61,6 +70,7 @@ class MLP(nn.Module):
         self.c_fc = nn.Linear(config.n_embd, 4 * config.n_embd)
         self.gelu = nn.GELU(approximate='tanh')
         self.c_proj = nn.Linear(4 * config.n_embd, config.n_embd)
+        self.c_proj.NANOGPT_SCALE_INIT = 1
 
     def forward(self, x):
         x = self.c_fc(x)
@@ -72,7 +82,7 @@ class MLP(nn.Module):
 @dataclass
 class GPTConfig:
     block_size: int = 1024
-    vocab_size: int = 50257
+    vocab_size: int = 50304
     n_layer: int = 12
     n_head: int = 12
     n_embd: int = 768
@@ -112,9 +122,23 @@ class GPT(nn.Module):
 
         self.apply(self._init_weights)
 
+
+    # Weight Initialization
+
+    # Modelin ağırlıklarını ortalaması 0 ve standart sapması 0.02 olan normal dağılımla başlatıyoruz.
+    # Böylece ağırlıklar başlangıçta küçük ve dengeli değerler alarak modelin
+    # eğitim sürecine uygun bir başlangıç yapmasını sağlıyoruz.
+    # Bias değerlerini ise 0 olarak initialize ediyoruz.
+    #
+    # Transformer mimarisinde residual bağlantılar nedeniyle katmanlar boyunca
+    # aktivasyonların büyümesini kontrol etmek önemlidir. Bunun için residual
+    # projection katmanlarına ayrıca özel initialization uygulanabilir. 
     def _init_weights(self, module):
         if isinstance(module, nn.Linear):
-            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
+            std = 0.2
+            if hasattr(module, 'NANOGPT_SCALE_INIT'):
+                std *= (2 * self.config.n_layer) ** -0.5
+            torch.nn.init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
                 torch.nn.init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
@@ -189,13 +213,12 @@ class GPT(nn.Module):
 
         return model
 
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
 # from transformers import GPT2LMHeadModel
 # model = GPT.from_pretrained('gpt2')
 model = GPT.from_pretrained('gpt2')
 model.eval()
 model.to(device)
+model = torch.compile(model)
 
 sd_hf = model.state_dict()
 
@@ -259,7 +282,7 @@ class DataLoaderLite:
 
         enc = tiktoken.get_encoding('gpt2')
         tokens = enc.encode(text)
-        self.tokens = torch.tensor(tokens)
+        self.tokens = torch.tensor(tokens, device=device)
 
         self.current_position = 0
         
@@ -281,16 +304,27 @@ class DataLoaderLite:
 
 train_loader = DataLoaderLite(B=4, T=32)
 
-optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4)
+optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4, betas=(0.9, 0.95), eps=1e-8)
 
+times = []
 for i in range(200):
+    t0 = time.time()
     x, y = train_loader.next_batch()
     x.to(device), y.to(device)
     optimizer.zero_grad()
-    logits, loss = model(x, y)
+    with torch.autocast(device_type="cuda", dtype=torch.float16):
+        logits, loss = model(x, y)
+        # import code; code.interact(local=locals())
     loss.backward()
+    norm = torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
     optimizer.step()
-    print(f"step {i}, loss: {loss.item()}")
+    torch.cuda.synchronize()
+    t1 = time.time()
+    dt = (t1 - t0) * 1000 # milisaniye olarak zaman farkı
+    tokens_processed = train_loader.B * train_loader.T
+    tokens_per_sec = tokens_processed / dt
+    times.append(dt)
+    print(f"step {i} | loss: {loss.item()} | norm: {norm:.4f} | dt: {dt:.2f}ms | tok/sec: {tokens_per_sec:.2f}")
 
 import sys
 sys.exit()
