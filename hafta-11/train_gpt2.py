@@ -220,6 +220,11 @@ model.eval()
 model.to(device)
 model = torch.compile(model)
 
+max_lr = 3e-4
+min_lr = max_lr * 0.1
+warmup_steps = 10
+max_steps = 50
+
 sd_hf = model.state_dict()
 
 for k,v in sd_hf.items():
@@ -304,6 +309,10 @@ class DataLoaderLite:
 
 train_loader = DataLoaderLite(B=4, T=32)
 
+# betas = first momentum, second momentum
+# gradient boyutları birbirlerinden büyük değişkenlik gösterebilir.
+# daha stabil şekilde gradient değerleri almak için momentum'ları kullanıyoruz
+# örn: %90 oranında geçmiş gradientların ortalamasını al + %10 oranında yeni gradient in değerini al
 optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4, betas=(0.9, 0.95), eps=1e-8)
 
 times = []
