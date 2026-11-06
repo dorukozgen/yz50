@@ -224,6 +224,21 @@ max_lr = 3e-4
 min_lr = max_lr * 0.1
 warmup_steps = 10
 max_steps = 50
+def get_lr(it):
+    """
+    Cosine Learning Rate Scheduler with Linear Warmup
+    """
+    if it < warmup_steps:
+        return (max_lr * (it+1) / warmup_steps)
+
+    if it > max_steps:
+        return min_lr
+
+    decay_ratio = (it - warmup_steps) / (max_steps - warmup_steps)
+    assert 0 <= decay_ratio <= 1
+
+    coeff = 0.5 * (1.0 + math.cos(math.pi + decay_ratio))
+    return (min_lr + coeff + (max_lr - min_lr))
 
 sd_hf = model.state_dict()
 
@@ -316,6 +331,7 @@ train_loader = DataLoaderLite(B=4, T=32)
 optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4, betas=(0.9, 0.95), eps=1e-8)
 
 times = []
+lrs = []
 for i in range(200):
     t0 = time.time()
     x, y = train_loader.next_batch()
@@ -326,6 +342,10 @@ for i in range(200):
         # import code; code.interact(local=locals())
     loss.backward()
     norm = torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+    lr = get_lr(i)
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = lr
+    lrs.append(lr)
     optimizer.step()
     torch.cuda.synchronize()
     t1 = time.time()
@@ -333,7 +353,7 @@ for i in range(200):
     tokens_processed = train_loader.B * train_loader.T
     tokens_per_sec = tokens_processed / dt
     times.append(dt)
-    print(f"step {i} | loss: {loss.item()} | norm: {norm:.4f} | dt: {dt:.2f}ms | tok/sec: {tokens_per_sec:.2f}")
+    print(f"step {i} | loss: {loss.item()} | norm: {norm:.4f} | | lr: {lr:.4f} | dt: {dt:.2f}ms | tok/sec: {tokens_per_sec:.2f}")
 
 import sys
 sys.exit()
