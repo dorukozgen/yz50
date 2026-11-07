@@ -11,8 +11,20 @@ import time
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 master_process = True
+print('device:', device)
 
 torch.set_float32_matmul_precision('high')
+torch.manual_seed(1337)
+if torch.cuda.is_available():
+    torch.cuda.manual_seed(1337)
+
+B = 16 # micro batch size: tek forward/backward'daki sequence sayısı
+T = 1024 # sequence length
+total_batch_size = 524288 # 2**19 ~0.5M token (GPT-3 Small'un batch size'ı)
+assert total_batch_size % (B * T) == 0, "make sure total_batch_size is divisible by B * T"
+grad_accum_steps = total_batch_size // (B * T)
+print(f"total desired batch size: {total_batch_size}")
+print(f"=> calculated gradient accumulation steps: {grad_accum_steps}")
 
 print("cuBLAS TF32:", torch.backends.cuda.matmul.allow_tf32)
 print("cuDNN TF32:", torch.backends.cudnn.allow_tf32)
@@ -138,7 +150,7 @@ class GPT(nn.Module):
     # projection katmanlarına ayrıca özel initialization uygulanabilir. 
     def _init_weights(self, module):
         if isinstance(module, nn.Linear):
-            std = 0.2
+            std = 0.02
             if hasattr(module, 'NANOGPT_SCALE_INIT'):
                 std *= (2 * self.config.n_layer) ** -0.5
             torch.nn.init.normal_(module.weight, mean=0.0, std=std)
@@ -215,12 +227,16 @@ class GPT(nn.Module):
                     sd[k].copy_(sd_hf[k])
 
         return model
+
     def configure_optimizers(self, weight_decay, learning_rate, device_type):
-        # start with all of the candidate parameters (that require grad)
+        """
+        Weight Decay
+
+        2 boyutlu tensor lerin ağırlıklarını günceller.
+        """
         param_dict = {pn: p for pn, p in self.named_parameters()}
         param_dict = {pn: p for pn, p in param_dict.items() if p.requires_grad}
-        # create optim groups. Any parameters that is 2D will be weight decayed, otherwise no.
-        # i.e. all weight tensors in matmuls + embeddings decay, all biases and layernorms don't.
+
         decay_params = [p for n, p in param_dict.items() if p.dim() >= 2]
         nodecay_params = [p for n, p in param_dict.items() if p.dim() < 2]
         optim_groups = [                    
@@ -243,7 +259,7 @@ class GPT(nn.Module):
 
 # from transformers import GPT2LMHeadModel
 # model = GPT.from_pretrained('gpt2')
-model = GPT.from_pretrained('gpt2')
+model = GPT(GPTConfig())
 model.eval()
 model.to(device)
 model = torch.compile(model)
@@ -294,8 +310,6 @@ tokens = torch.tensor(tokens, dtype=torch.long, device=device)
 print("len of tokens:", len(tokens))
 
 x = tokens.unsqueeze(0).repeat(num_return_sequences, 1)
-
-torch.manual_seed(42)
 
 # while x.size(1) < max_length:
 #     with torch.no_grad():
@@ -353,25 +367,41 @@ class DataLoaderLite:
 
         return (x, y)
 
-train_loader = DataLoaderLite(B=4, T=32)
+train_loader = DataLoaderLite(B=B, T=T)
 
 # betas = first momentum, second momentum
 # gradient boyutları birbirlerinden büyük değişkenlik gösterebilir.
 # daha stabil şekilde gradient değerleri almak için momentum'ları kullanıyoruz
 # örn: %90 oranında geçmiş gradientların ortalamasını al + %10 oranında yeni gradient in değerini al
-optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4, betas=(0.9, 0.95), eps=1e-8)
+# optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4, betas=(0.9, 0.95), eps=1e-8)
+optimizer = model.configure_optimizers(weight_decay=0.1, learning_rate=6e-4, device_type=device)
+
+
+o = open('o.txt', 'w+')
 
 times = []
 lrs = []
+outs = []
 for i in range(max_steps):
     t0 = time.time()
-    x, y = train_loader.next_batch()
-    x.to(device), y.to(device)
     optimizer.zero_grad()
-    with torch.autocast(device_type="cuda", dtype=torch.float16):
-        logits, loss = model(x, y)
+    loss_accum = 0.0
+    for micro_step in range(grad_accum_steps):
+        x, y = train_loader.next_batch()
+        x, y = x.to(device), y.to(device)
+        with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+            logits, loss = model(x, y)
         # import code; code.interact(local=locals())
-    loss.backward()
+
+        # Gradient Accumulation
+        # backward() her çağrıldığında gradient'ler .grad'ın üzerine eklenir (+=).
+        # F.cross_entropy tek bir micro batch'in ORTALAMA loss'unu verir; bölmeden backward yaparsak
+        # grad_accum_steps tane ortalamanın TOPLAMINI almış oluruz (gradient grad_accum_steps kat büyür).
+        # loss'u grad_accum_steps'e bölünce toplanan gradient, 524288 token'lık büyük batch'in
+        # tek seferde hesaplanan ortalama loss'unun gradient'ine eşit olur.
+        loss = loss / grad_accum_steps
+        loss_accum += loss.detach()
+        loss.backward()
     norm = torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
     lr = get_lr(i)
     for param_group in optimizer.param_groups:
@@ -380,14 +410,22 @@ for i in range(max_steps):
     optimizer.step()
     torch.cuda.synchronize()
     t1 = time.time()
-    dt = (t1 - t0) * 1000 # milisaniye olarak zaman farkı
-    tokens_processed = train_loader.B * train_loader.T
+    dt = (t1 - t0) # saniye olarak zaman farkı (log'da ms'ye çevriliyor)
+    tokens_processed = train_loader.B * train_loader.T * grad_accum_steps
     tokens_per_sec = tokens_processed / dt
     times.append(dt)
-    print(f"step {i} | loss: {loss.item()} | lr: {lr:.4f} | norm: {norm:.4f} | | dt: {dt:.2f}ms | tok/sec: {tokens_per_sec:.2f}")
+    log_str = f"step {i} | loss: {loss_accum.item():.6f} | lr: {optimizer.param_groups[0]['lr']:.4e} | norm: {norm:.4f} | dt: {dt * 1000:.2f}ms | tok/sec: {tokens_per_sec:.2f}"
+    print(log_str)
+    if i < 50:
+        outs.append(log_str)
 
 plt.plot(lrs)
+plt.xlabel('step')
+plt.ylabel('learning rate')
+plt.title('Cosine LR schedule with linear warmup')
 plt.savefig('lrs_graph.png', bbox_inches='tight')
+
+o.write('\n'.join(outs))
 
 import sys
 sys.exit()
